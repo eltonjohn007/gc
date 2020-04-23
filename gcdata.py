@@ -1,3 +1,4 @@
+
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -81,7 +82,7 @@ def numonly(A):
     B=[l for l in A if l.isdigit() or l.isalpha()]
     return ''.join(B)
 #gc directory
-directory='data/gcdata.csv'
+directory='D:\\Dropbox (MIT)\\Documents\\finance\\gift cards\\gcdata.csv'
 #def process():
 if 'gcinput' not in locals():
     gcinput=input('Enter input format (1 for url, 2 for gc codes, 3 for scanned codes): ')
@@ -139,7 +140,6 @@ if gcinput=='1':
             print('\nDuplicate url!')
         else:
             page=requests.get(url)
-            #get html code of the website
             soup=BeautifulSoup(page.text,'html.parser')
             if 'paypal' in url:
                 if pagesave:
@@ -147,9 +147,6 @@ if gcinput=='1':
                         pdfkit.from_string(page.text,savedir(),configuration=config,options=options)
                     except:
                         pass
-#                body = soup.find('body')
-#                for tag in body:
-#                    text=tag.text
                 text=soup.find('body').text
                 balance=re.findall('\"itemValue\":\"(.+?)\"',text)[0][1:]
                 if brand=='wayfair':
@@ -166,6 +163,10 @@ if gcinput=='1':
                 if brand=='itunes':
                     balance=re.findall('Your (.+?) App Store',text)[0][1:]
                     code=re.findall('Card: (.+?)\n\n',text)[0]
+                elif brand=='macy\'s':
+                    balance=''.join([l for l in re.findall('\$(.+?)\n',text)[0] if l.isdigit()])
+                    code=re.findall('Code\n\n\n(.+?)\n',text)[0].split(' ')[0]
+                    pin=re.findall('Code\n\n\n(.+?)\n',text)[0].split(' ')[1]
                 else:
                     if re.findall('\$(.+?)\n',text)!=[]:
                         balance=''.join([l for l in re.findall('\$(.+?)\n',text)[0] if l.isdigit()])
@@ -173,7 +174,9 @@ if gcinput=='1':
                         balance=re.findall('your \$(.+?) USD',text)[0]
                     if not balance.isdigit():
                         balance=''.join([l for l in balance if l.isdigit()])
-                    if re.findall('#: (.+?)\n',text)!=[]:
+                    if re.findall('Gift Card #: \n(.+?)\n',text)!=[]:
+                        code=re.findall('Gift Card #: \n(.+?)\n',text)[0]
+                    elif re.findall('#: (.+?)\n',text)!=[]:
                         code=re.findall('#: (.+?)\n',text)[0]
                     elif re.findall('Card: (.+?)\n',text)!=[]:
                         code=re.findall('Card: (.+?)\n',text)[0]
@@ -183,7 +186,7 @@ if gcinput=='1':
                         code=re.findall('Card #:\xa0\xa0(.+?)\n',text)[0]
                     else:
                         code=re.findall('Card #:\n(.+?)\n',text)[0]
-                    code=brandprocessing(brand,code)
+                    code=brandprocessing(brand,code).replace(' ','')
                     if not codeonly(brand):
                         if re.findall('Pin: (.+?)\n',text)!=[]:
                             pin=re.findall('Pin: (.+?)\n',text)[0]
@@ -193,8 +196,13 @@ if gcinput=='1':
                             pin=re.findall('PIN: (.+?)\n',text)[0]
                         elif re.findall('Pin:\n(.+?)\n',text)!=[]:
                             pin=re.findall('Pin:\n(.+?)\n',text)[0]
-                        else:
+                        elif re.findall('PIN:\xa0\xa0(.+?)\n',text)!=[]:
                             pin=re.findall('PIN:\xa0\xa0(.+?)\n',text)[0]
+                        elif re.findall('PIN\):\n(.+?)\n',text)!=[]:
+                            pin=re.findall('PIN\):\n(.+?)\n',text)[0]
+                        else:
+                            pin=re.findall('Pin #: (.+?)\n',text)[0]
+                        pin=pin.replace(' ','')
             elif 'vcdelivery' in url or 'newegg' in url:
                 if pagesave:
                     pdfkit.from_url(url,savedir(),configuration=config,options=options)
@@ -229,7 +237,7 @@ if gcinput=='1':
                 code=re.findall('Card Number: \n\n\n(.+?)\n',text)[0]
                 code=brandprocessing(brand,code)
                 if not codeonly(brand):
-                    pin=re.findall('Pin: (.+?)\n',text)[0]           
+                    pin=re.findall('Pin: (.+?)\n',text)[0]        
             gccompile()
             urlset.add(url)
             del page
@@ -253,7 +261,8 @@ elif gcinput=='2':
 elif gcinput=='3':
     balance=input('Enter gc balance: ')
     data=input('Enter gc data: ')
-    gccodes=[l for l in data.split('\n') if l.isdigit()]
+    today=datetime.date.today().strftime("%m/%d/%Y")
+    gccodes=[x.replace(' ','') for x in data.split('\n') if not x=='' and not today in x and not ':' in x]
     for l in gccodes:
         print('\n')
         code=brandprocessing(brand,l)
