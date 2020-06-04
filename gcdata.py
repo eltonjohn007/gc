@@ -56,6 +56,7 @@ def brandprocessing(x,y):
             y=y[0:int(digits[:-1])]
     return y
 
+
 def codeonly(x):
     return not pd.isna(df[x]['codeonly'])
 
@@ -64,19 +65,19 @@ def savedir():
 #compile gcdata into desired format for output and storage
 def gccompile():
     if gcformat=='1':
-        if not codeonly(brand):
+#        if not codeonly(brand):
             gcdata.append([datetime.datetime.now().strftime("%Y-%m-%d"),source,brand,balance,'\''+code,'\''+pin])
             gcprint.append(balance+','+code+','+pin)
-        else:
-            gcdata.append([datetime.datetime.now().strftime("%Y-%m-%d"),source,brand,balance,'\''+code])
-            gcprint.append(balance+','+code)
+#        else:
+#            gcdata.append([datetime.datetime.now().strftime("%Y-%m-%d"),source,brand,balance,'\''+code])
+#            gcprint.append(balance+','+code)
     elif gcformat=='2':
-        if not codeonly(brand):
+#        if not codeonly(brand):
             gcdata.append([datetime.datetime.now().strftime("%Y-%m-%d"),source,brand,balance,'\''+code,'\''+pin])
             gcprint.append(code+','+pin+','+balance)
-        else:
-            gcdata.append([datetime.datetime.now().strftime("%Y-%m-%d"),source,brand,balance,'\''+code])
-            gcprint.append(code+',,'+balance)
+#        else:
+#            gcdata.append([datetime.datetime.now().strftime("%Y-%m-%d"),source,brand,balance,'\''+code])
+#            gcprint.append(code+',,'+balance)
 
 def numonly(A):
     B=[l for l in A if l.isdigit() or l.isalpha()]
@@ -124,13 +125,7 @@ if gcinput=='1':
         if gcformat=='1':
             pagesave=not pd.isna(df[brand]['gcwpdf'])
         if gcformat=='2':
-            pagesave=not pd.isna(df[brand]['tcbpdf'])
-#        printinput=input('Print gc page: ')
-#        if printinput=='':
-#            pagesave=False
-#        else:
-#            pagesave=True
-            
+            pagesave=not pd.isna(df[brand]['tcbpdf'])       
     truth=True
     while truth:
         url=input('Enter url:')
@@ -141,6 +136,7 @@ if gcinput=='1':
         else:
             page=requests.get(url)
             soup=BeautifulSoup(page.text,'html.parser')
+            pin=''
             if 'paypal' in url:
                 if pagesave:
                     try:
@@ -148,6 +144,8 @@ if gcinput=='1':
                     except:
                         pass
                 text=soup.find('body').text
+                if text=='\nYou need to enable JavaScript to run this app.\n\n\n\n\n':
+                    text=str(page.content)
                 balance=re.findall('\"itemValue\":\"(.+?)\"',text)[0][1:]
                 if brand=='wayfair':
                     code=re.findall('\"security_code\":\"(.+?)\"',text)[0]
@@ -167,25 +165,37 @@ if gcinput=='1':
                     balance=''.join([l for l in re.findall('\$(.+?)\n',text)[0] if l.isdigit()])
                     code=re.findall('Code\n\n\n(.+?)\n',text)[0].split(' ')[0]
                     pin=re.findall('Code\n\n\n(.+?)\n',text)[0].split(' ')[1]
+                elif brand=='starbucks':
+                    balance=re.findall('eGift Card\n\n\$(.+?) USD',text)[0]
+                    code=re.findall('stores.\n\n\n\n(.+?)\n',text)[0]
+                    pin=re.findall('Code:\n (.+?) \n',text)[0]
                 else:
                     if re.findall('\$(.+?)\n',text)!=[]:
                         balance=''.join([l for l in re.findall('\$(.+?)\n',text)[0] if l.isdigit()])
                     elif re.findall('your \$(.+?) USD',text)!=[]:
                         balance=re.findall('your \$(.+?) USD',text)[0]
+                    else:
+                        raise ValueError("Format not supported")
                     if not balance.isdigit():
                         balance=''.join([l for l in balance if l.isdigit()])
                     if re.findall('Gift Card #: \n(.+?)\n',text)!=[]:
                         code=re.findall('Gift Card #: \n(.+?)\n',text)[0]
-                    elif re.findall('#: (.+?)\n',text)!=[]:
-                        code=re.findall('#: (.+?)\n',text)[0]
-                    elif re.findall('Card: (.+?)\n',text)!=[]:
-                        code=re.findall('Card: (.+?)\n',text)[0]
+                    elif re.findall('#:(.+?)\n',text)!=[]:
+                        code=re.findall('#:(.+?)\n',text)[0]
                     elif re.findall('Card Number: (.+?)\n',text)!=[]:
                         code=re.findall('Card Number: (.+?)\n',text)[0]
+                    elif re.findall('Card: (.+?)\n',text)!=[]:
+                        code=re.findall('Card: (.+?)\n',text)[0]
                     elif re.findall('Card #:\xa0\xa0(.+?)\n',text)!=[]:
                         code=re.findall('Card #:\xa0\xa0(.+?)\n',text)[0]
-                    else:
+                    elif re.findall('Card Number:\n(.+?)\n',text)!=[]:
+                        code=re.findall('Card Number:\n(.+?)\n',text)[0]
+                    elif re.findall('Card #:\n(.+?)\n',text)!=[]:
                         code=re.findall('Card #:\n(.+?)\n',text)[0]
+                    elif re.findall('Number:\xa0\xa0(.+?)\n',text)!=[]:
+                        code=re.findall('Number:\xa0\xa0(.+?)\n',text)[0]
+                    else:
+                        raise ValueError("Format not supported")                 
                     code=brandprocessing(brand,code).replace(' ','')
                     if not codeonly(brand):
                         if re.findall('Pin: (.+?)\n',text)!=[]:
@@ -196,11 +206,13 @@ if gcinput=='1':
                             pin=re.findall('PIN: (.+?)\n',text)[0]
                         elif re.findall('Pin:\n(.+?)\n',text)!=[]:
                             pin=re.findall('Pin:\n(.+?)\n',text)[0]
+                        elif re.findall('PIN:\n(.+?)\n',text)!=[]:
+                            pin=re.findall('PIN:\n(.+?)\n',text)[0]
                         elif re.findall('PIN:\xa0\xa0(.+?)\n',text)!=[]:
                             pin=re.findall('PIN:\xa0\xa0(.+?)\n',text)[0]
                         elif re.findall('PIN\):\n(.+?)\n',text)!=[]:
                             pin=re.findall('PIN\):\n(.+?)\n',text)[0]
-                        else:
+                        elif re.findall('Pin #: (.+?)\n',text)!=[]:
                             pin=re.findall('Pin #: (.+?)\n',text)[0]
                         pin=pin.replace(' ','')
             elif 'vcdelivery' in url or 'newegg' in url:
@@ -237,7 +249,15 @@ if gcinput=='1':
                 code=re.findall('Card Number: \n\n\n(.+?)\n',text)[0]
                 code=brandprocessing(brand,code)
                 if not codeonly(brand):
-                    pin=re.findall('Pin: (.+?)\n',text)[0]        
+                    pin=re.findall('Pin: (.+?)\n',text)[0]
+            elif 'buyatab' in url:
+                if pagesave:
+                    pdfkit.from_url(url,savedir(),configuration=config,options=options)
+                text=soup.find('body').text
+                balance=re.findall('"amount": (.+?),\r',text)[0][:-5]
+                code=re.findall('"sCode": \"(.+?)\",\r',text)[0]
+                if not codeonly(brand):
+                    pin=re.findall('"pin": \"(.+?)\",\r',text)[0]
             gccompile()
             urlset.add(url)
             del page
@@ -252,6 +272,9 @@ elif gcinput=='2':
             truth=False
         else:
             code=numonly(A)
+            pin=''
+            if brand=='bloomingdale\'s':
+                pin=code[-4:]
             code=brandprocessing(brand,code)
             if not codeonly(brand):
                 pin=input('Enter gc pin: ')
@@ -267,6 +290,7 @@ elif gcinput=='3':
         print('\n')
         code=brandprocessing(brand,l)
         print(code)
+        pin=''
         if not codeonly(brand):
             pin=input('Enter gc pin: ')
         gccompile()
