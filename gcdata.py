@@ -1,10 +1,14 @@
-
 import requests
 from bs4 import BeautifulSoup
 import re
 import csv
 import datetime
 import pandas as pd
+from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
 
 import pdfkit
 path_wkthmltopdf = r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe'
@@ -18,6 +22,7 @@ df.columns=df.iloc[0]
 df=df[1:]
 
 df2=pd.read_csv('data/brand.csv')
+df_default=pd.read_csv('data/default.csv')
 
 class ss():
     def sourcelist():
@@ -65,19 +70,13 @@ def savedir():
 #compile gcdata into desired format for output and storage
 def gccompile():
     if gcformat=='1':
-#        if not codeonly(brand):
             gcdata.append([datetime.datetime.now().strftime("%Y-%m-%d"),source,brand,balance,'\''+code,'\''+pin])
             gcprint.append(balance+','+code+','+pin)
-#        else:
-#            gcdata.append([datetime.datetime.now().strftime("%Y-%m-%d"),source,brand,balance,'\''+code])
-#            gcprint.append(balance+','+code)
+
     elif gcformat=='2':
-#        if not codeonly(brand):
             gcdata.append([datetime.datetime.now().strftime("%Y-%m-%d"),source,brand,balance,'\''+code,'\''+pin])
             gcprint.append(code+','+pin+','+balance)
-#        else:
-#            gcdata.append([datetime.datetime.now().strftime("%Y-%m-%d"),source,brand,balance,'\''+code])
-#            gcprint.append(code+',,'+balance)
+
 
 def numonly(A):
     B=[l for l in A if l.isdigit() or l.isalpha()]
@@ -86,19 +85,25 @@ def numonly(A):
 directory='D:\\Dropbox (MIT)\\Documents\\finance\\gift cards\\gcdata.csv'
 #def process():
 if 'gcinput' not in locals():
-    gcinput=input('Enter input format (1 for url, 2 for gc codes, 3 for scanned codes): ')
-    while gcinput not in {'1','2','3'}:
+    gcinput=input('Enter input format (1 for url, 2 for gc codes, 3 for scanned codes) [Default '+str(df_default['gcinput'].values[0])+']: ')
+    while gcinput not in {'1','2','3',''}:
         print('\nWrong format!')
-        gcinput=input('Enter input format (1 for url, 2 for gc codes, 3 for scanned codes): ')
-
+        gcinput=input('Enter input format (1 for url, 2 for gc codes, 3 for scanned codes) [Default '+str(df_default['gcinput'].values[0])+']: ')
+    if gcinput=='':
+        gcinput=str(df_default['gcinput'].values[0])
+    
 if 'gcformat' not in locals():
-    gcformat=input('Enter format (1 for gcw, 2 for tcb): ')
-    while gcformat not in {'1','2'}:
+    gcformat=input('Enter format (1 for gcw, 2 for tcb) [Default '+str(df_default['gcformat'].values[0])+']: ')
+    while gcformat not in {'1','2',''}:
         print('\nWrong format!')
         gcformat=input('Enter format: ')
+    if gcformat=='':
+        gcformat=str(df_default['gcformat'].values[0])
         
 if 'source' not in locals():
-    source=input('\nEnter source: ')
+    source=input('\nEnter source [Default '+df_default['source'].values[0]+']: ')
+    if source=='':
+        source=df_default['source'].values[0]
     while not ss.contain(source):
         possiblesource=[l for l in ss.sourcelist() if l[0]==source[0]]
         print(possiblesource)
@@ -106,7 +111,9 @@ if 'source' not in locals():
         source=input('Enter source: ')
             
 if 'brand' not in locals():
-    brand=input('\nEnter brand: ')
+    brand=input('\nEnter brand [Default '+df_default['brand'].values[0]+']: ')
+    if brand=='':
+        brand=df_default['brand'].values[0]
     while not bb.contain(brand):
         possiblebrand=[l for l in bb.brandlist() if l[0]==brand[0]]
         print(possiblebrand)
@@ -144,7 +151,7 @@ if gcinput=='1':
                     except:
                         pass
                 text=soup.find('body').text
-                if text=='\nYou need to enable JavaScript to run this app.\n\n\n\n\n':
+                if 'Javascript' in text:
                     text=str(page.content)
                 balance=re.findall('\"itemValue\":\"(.+?)\"',text)[0][1:]
                 if brand=='wayfair':
@@ -158,63 +165,59 @@ if gcinput=='1':
                 if pagesave:
                     pdfkit.from_url(url,savedir(),configuration=config,options=options)
                 text=soup.find('body').text
-                if brand=='itunes':
-                    balance=re.findall('Your (.+?) App Store',text)[0][1:]
-                    code=re.findall('Card: (.+?)\n\n',text)[0]
-                elif brand=='macy\'s':
-                    balance=''.join([l for l in re.findall('\$(.+?)\n',text)[0] if l.isdigit()])
-                    code=re.findall('Code\n\n\n(.+?)\n',text)[0].split(' ')[0]
-                    pin=re.findall('Code\n\n\n(.+?)\n',text)[0].split(' ')[1]
-                elif brand=='starbucks':
-                    balance=re.findall('eGift Card\n\n\$(.+?) USD',text)[0]
-                    code=re.findall('stores.\n\n\n\n(.+?)\n',text)[0]
-                    pin=re.findall('Code:\n (.+?) \n',text)[0]
+                if 'Javascript' in text:
+                    option = webdriver.ChromeOptions()
+                    option.add_argument("— incognito")
+                    browser = webdriver.Chrome(options=option)
+                    browser.get(url)
+                    browser.minimize_window()
+                    try:
+                        element_present = EC.presence_of_element_located((By.ID, 'main'))
+                        WebDriverWait(browser, 30).until(element_present)
+                    except TimeoutException:
+                        print("Timed out waiting for page to load")
+                    text=browser.find_element_by_id(id_='main').text
+                    browser.quit()
+                text=text.replace('\xa0','')
+                text=text.replace('\n','')
+                text=text.replace('\t','')
+                text=text.replace('#','')
+                text=text.replace(' ','')
+                text=text.upper()
+                if re.findall('YOUR\$(.+?)USD',text)!=[]:
+                    balance=re.findall('YOUR\$(.+?)USD',text)[0]
+                elif re.findall('VALUE:(.+?)CARD',text)!=[]:
+                    balance=re.findall('VALUE:(.+?)CARD',text)[0]
+                elif re.findall('CARD(.+?)TO:',text)!=[]:
+                    balance=re.findall('CARD(.+?)TO:',text)[0]
+                elif re.findall('CARD\$(.+?)BARCODE',text)!=[]:
+                    balance=re.findall('CARD\$(.+?)BARCODE',text)[0]
                 else:
-                    if re.findall('\$(.+?)\n',text)!=[]:
-                        balance=''.join([l for l in re.findall('\$(.+?)\n',text)[0] if l.isdigit()])
-                    elif re.findall('your \$(.+?) USD',text)!=[]:
-                        balance=re.findall('your \$(.+?) USD',text)[0]
+                    raise ValueError("Format not supported")
+                if not balance.isdigit():
+                    balance=''.join([l for l in balance if l.isdigit()])
+                if re.findall('CARD:(.+?)PIN',text)!=[]:
+                    code=re.findall('CARD:(.+?)PIN',text)[0]
+                elif re.findall('CARDNUMBER:(.+?)SECURITYCODE',text)!=[]:
+                    code=re.findall('CARDNUMBER:(.+?)SECURITYCODE',text)[0]
+                elif re.findall('CODE:(.+?)SERIAL',text)!=[]:
+                    code=re.findall('CODE:(.+?)SERIAL',text)[0]
+                else:
+                    raise ValueError("Format not supported")                 
+                if not codeonly(brand):
+                    pin=[]
+                    if re.findall('PIN:(.+?)TO',text)!=[]:
+                        pin.append(re.findall('PIN:(.+?)TO',text)[0])
+                    if re.findall('PIN\):(.+?)USING',text)!=[]:
+                        pin.append(re.findall('PIN\):(.+?)USING',text)[0])
+                    if re.findall('SERIALNUMBER:(.+?)REDEEM',text)!=[]:
+                        pin.append(re.findall('SERIALNUMBER:(.+?)REDEEM',text)[0])
+                    if re.findall('PIN:(.+?)REDEEM',text)!=[]:
+                        pin.append(re.findall('PIN:(.+?)REDEEM',text)[0])
+                    if len(pin)>0:
+                        pin=min(pin,key=len)
                     else:
                         raise ValueError("Format not supported")
-                    if not balance.isdigit():
-                        balance=''.join([l for l in balance if l.isdigit()])
-                    if re.findall('Gift Card #: \n(.+?)\n',text)!=[]:
-                        code=re.findall('Gift Card #: \n(.+?)\n',text)[0]
-                    elif re.findall('#:(.+?)\n',text)!=[]:
-                        code=re.findall('#:(.+?)\n',text)[0]
-                    elif re.findall('Card Number: (.+?)\n',text)!=[]:
-                        code=re.findall('Card Number: (.+?)\n',text)[0]
-                    elif re.findall('Card: (.+?)\n',text)!=[]:
-                        code=re.findall('Card: (.+?)\n',text)[0]
-                    elif re.findall('Card #:\xa0\xa0(.+?)\n',text)!=[]:
-                        code=re.findall('Card #:\xa0\xa0(.+?)\n',text)[0]
-                    elif re.findall('Card Number:\n(.+?)\n',text)!=[]:
-                        code=re.findall('Card Number:\n(.+?)\n',text)[0]
-                    elif re.findall('Card #:\n(.+?)\n',text)!=[]:
-                        code=re.findall('Card #:\n(.+?)\n',text)[0]
-                    elif re.findall('Number:\xa0\xa0(.+?)\n',text)!=[]:
-                        code=re.findall('Number:\xa0\xa0(.+?)\n',text)[0]
-                    else:
-                        raise ValueError("Format not supported")                 
-                    code=brandprocessing(brand,code).replace(' ','')
-                    if not codeonly(brand):
-                        if re.findall('Pin: (.+?)\n',text)!=[]:
-                            pin=re.findall('Pin: (.+?)\n',text)[0]
-                        elif re.findall('PIN\): (.+?)\n',text)!=[]:
-                            pin=re.findall('PIN\): (.+?)\n',text)[0]
-                        elif re.findall('PIN: (.+?)\n',text)!=[]:
-                            pin=re.findall('PIN: (.+?)\n',text)[0]
-                        elif re.findall('Pin:\n(.+?)\n',text)!=[]:
-                            pin=re.findall('Pin:\n(.+?)\n',text)[0]
-                        elif re.findall('PIN:\n(.+?)\n',text)!=[]:
-                            pin=re.findall('PIN:\n(.+?)\n',text)[0]
-                        elif re.findall('PIN:\xa0\xa0(.+?)\n',text)!=[]:
-                            pin=re.findall('PIN:\xa0\xa0(.+?)\n',text)[0]
-                        elif re.findall('PIN\):\n(.+?)\n',text)!=[]:
-                            pin=re.findall('PIN\):\n(.+?)\n',text)[0]
-                        elif re.findall('Pin #: (.+?)\n',text)!=[]:
-                            pin=re.findall('Pin #: (.+?)\n',text)[0]
-                        pin=pin.replace(' ','')
             elif 'vcdelivery' in url or 'newegg' in url:
                 if pagesave:
                     pdfkit.from_url(url,savedir(),configuration=config,options=options)
@@ -245,19 +248,42 @@ if gcinput=='1':
                 if pagesave:
                     pdfkit.from_url(url,savedir(),configuration=config,options=options)
                 text=soup.find('body').text
-                balance=re.findall('\$(.+?) ',text)[0][:-3]
-                code=re.findall('Card Number: \n\n\n(.+?)\n',text)[0]
+                text=text.replace('\xa0','')
+                text=text.replace('\n','')
+                text=text.replace('\t','')
+                text=text.replace('#','')
+                text=text.replace(' ','')
+                text=text.upper()
+                if re.findall('YOUR\$(.+?)E-GIFT',text)!=[]:
+                    balance=str(round(float(re.findall('YOUR\$(.+?)E-GIFT',text)[0])))
+                elif re.findall('CARD\$(.+?)USD',text)!=[]:
+                    balance=str(round(float(re.findall('CARD\$(.+?)USD',text)[0])))
+                else:
+                    raise ValueError("Format not supported")
+                if re.findall('CARDNUMBER:(.+?)PIN',text)!=[]:
+                    code=re.findall('CARDNUMBER:(.+?)PIN',text)[0]
+                elif re.findall('CARDNUMBER(.+?)COPIED',text)!=[]:
+                    code=re.findall('CARDNUMBER(.+?)COPIED',text)[0]
+                else:
+                    raise ValueError("Format not supported")
                 code=brandprocessing(brand,code)
                 if not codeonly(brand):
-                    pin=re.findall('Pin: (.+?)\n',text)[0]
+                    if re.findall('PIN:(.+?)SEND',text)!=[]:
+                        pin=re.findall('PIN:(.+?)SEND',text)[0]
+                    elif re.findall('PIN(.+?)COPIED',text)!=[]:
+                        pin=re.findall('PIN(.+?)COPIED',text)[0]
+                    else:
+                        raise ValueError("Format not supported")
             elif 'buyatab' in url:
                 if pagesave:
                     pdfkit.from_url(url,savedir(),configuration=config,options=options)
-                text=soup.find('body').text
-                balance=re.findall('"amount": (.+?),\r',text)[0][:-5]
-                code=re.findall('"sCode": \"(.+?)\",\r',text)[0]
+                text=str(page.content)
+                balance=re.findall('"amount": (.+?),',text)[0][:-5]
+                code=re.findall('"sCode": \"(.+?)\",',text)[0]
                 if not codeonly(brand):
-                    pin=re.findall('"pin": \"(.+?)\",\r',text)[0]
+                    pin=re.findall('"pin": \"(.+?)\",',text)[0]
+            else:
+                raise ValueError("Format not supported")
             gccompile()
             urlset.add(url)
             del page
@@ -285,13 +311,12 @@ elif gcinput=='3':
     balance=input('Enter gc balance: ')
     data=input('Enter gc data: ')
     today=datetime.date.today().strftime("%m/%d/%Y")
-    gccodes=[x.replace(' ','') for x in data.split('\n') if not x=='' and not today in x and not ':' in x]
+    gccodes=[x.replace(' ','') for x in re.split('\n|:',data) if not x=='' and not today in x and not 'PIN' in x]    
     for l in gccodes:
-        print('\n')
         code=brandprocessing(brand,l)
-        print(code)
         pin=''
         if not codeonly(brand):
+            print(code)
             pin=input('Enter gc pin: ')
         gccompile()
         print('\n'+str(len(gcdata))+' card entered!')
@@ -302,5 +327,7 @@ for l in gcprint:
 with open(directory, 'a', newline='') as f:
     writer = csv.writer(f)
     writer.writerows(gcdata)
+df_default=pd.DataFrame({'gcinput':gcinput,'gcformat':gcformat,'source':source,'brand':brand},index=[0])
+df_default.to_csv('data/default.csv',index=False)
 
 #process()
