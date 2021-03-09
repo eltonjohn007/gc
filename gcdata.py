@@ -62,20 +62,29 @@ def brandprocessing(x,y):
             y=y[0:int(digits[:-1])]
     return y
 
+def pinprocessing(x,y,z):
+    if not pd.isna(df[x]['pin']):
+        digits=df[x]['pin']
+        if digits[-1]=='e':
+            z.append(y[-int(digits[:-1]):])
+        elif digits[-1]=='f':
+            z.append(y[0:int(digits[:-1])])
+    return z
+
 
 def codeonly(x):
     return not pd.isna(df[x]['codeonly'])
 
 def savedir():
-    return 'D:\\Dropbox (MIT)\\Documents\\'+datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")+'.pdf'
+    return 'D:\\Documents\\'+datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")+'.pdf'
 #compile gcdata into desired format for output and storage
 def gccompile():
     if gcformat=='1':
-            gcdata.append([datetime.datetime.now().strftime("%Y-%m-%d"),source,brand,balance,'\''+code,'\''+pin])
+            gcdata.append([datetime.datetime.now().strftime("%Y-%m-%d"),source,brand,balance,'\''+code.replace(' ',''),'\''+pin.replace(' ','')])
             gcprint.append(balance+','+code+','+pin)
 
     elif gcformat=='2':
-            gcdata.append([datetime.datetime.now().strftime("%Y-%m-%d"),source,brand,balance,'\''+code,'\''+pin])
+            gcdata.append([datetime.datetime.now().strftime("%Y-%m-%d"),source,brand,balance,'\''+code.replace(' ',''),'\''+pin.replace(' ','')])
             gcprint.append(code+','+pin+','+balance)
 
 def urlgc(pagesave,url):
@@ -99,7 +108,7 @@ def urlgc(pagesave,url):
         code=brandprocessing(brand,code)
         if not codeonly(brand):
             pin=re.findall('\"security_code\":\"(.+?)\"',text)[0]
-    elif 'activationspot' in url:
+    elif 'activationspot' in url or 'blackhawknetwork' in url:
         if pagesave:
             pdfkit.from_url(url,savedir(),configuration=config,options=options)
         text=soup.find('body').text
@@ -139,12 +148,16 @@ def urlgc(pagesave,url):
             balance.append(re.findall('YOUR\$(.+?)APPLE',text)[0])
         if re.findall('CARD\$(.+?)CARD:',text)!=[]:
             balance.append(re.findall('CARD\$(.+?)CARD:',text)[0])
+        if re.findall('AMOUNT\:\$(.+?)E-GIFT',text)!=[]:
+            balance.append(re.findall('AMOUNT\:\$(.+?)E-GIFT',text)[0])
+        if re.findall('CARD\$(.+?)FROM',text)!=[]:
+            balance.append(re.findall('CARD\$(.+?)FROM',text)[0])
         if len(balance)>0:
             balance=min(balance,key=len)
         else:
             raise ValueError("Format not supported")
-        if not balance.isdigit():
-            balance=''.join([l for l in balance if l.isdigit()])
+        balance=balance.replace('$','')
+        balance=str(int(float(balance)/5)*5)
         code=[]
         if re.findall('CARD:(.+?)PIN',text)!=[]:
             code.append(re.findall('CARD:(.+?)PIN',text)[0])
@@ -160,10 +173,16 @@ def urlgc(pagesave,url):
             code.append(re.findall('CARD:(.+?)THE',text)[0])
         if re.findall('CARD:(.+?)REDEEM',text)!=[]:
             code.append(re.findall('CARD:(.+?)REDEEM',text)[0])
+        if re.findall('CARDNUMBER:(.+?)BARCODE',text)!=[]:
+            code.append(re.findall('CARDNUMBER:(.+?)BARCODE',text)[0])
+        if re.findall('CODE:(.+?)CARD',text)!=[]:
+            code.append(re.findall('CODE:(.+?)CARD',text)[0])
+        if re.findall('CODE:(.+?)TO',text)!=[]:
+            code.append(re.findall('CODE:(.+?)TO',text)[0])
         if len(code)>0:
             code=min(code,key=len)
         else:
-            raise ValueError("Format not  supported")     
+            raise ValueError("Format not supported")     
         if not codeonly(brand):
             pin=[]
             if re.findall('PIN:(.+?)TO',text)!=[]:
@@ -174,12 +193,16 @@ def urlgc(pagesave,url):
                 pin.append(re.findall('SERIALNUMBER:(.+?)REDEEM',text)[0])
             if re.findall('PIN:(.+?)REDEEM',text)!=[]:
                 pin.append(re.findall('PIN:(.+?)REDEEM',text)[0])
+            if re.findall('PIN:(.+?)USING',text)!=[]:
+                pin.append(re.findall('PIN:(.+?)USING',text)[0])
             if re.findall('PIN:(.+?)BARCODE',text)!=[]:
                 pin.append(re.findall('PIN:(.+?)BARCODE',text)[0])
+            pin=pinprocessing(brand,code,pin)
             if len(pin)>0:
                 pin=min(pin,key=len)
             else:
                 raise ValueError("Format not supported")
+        code=brandprocessing(brand,code)
     elif 'vcdelivery' in url:
         if pagesave:
             pdfkit.from_url(url,savedir(),configuration=config,options=options)
@@ -216,19 +239,29 @@ def urlgc(pagesave,url):
         text=text.replace('#','')
         text=text.replace(' ','')
         text=text.upper()
+        balance=[]
         if re.findall('YOUR\$(.+?)E-GIFT',text)!=[]:
-            balance=str(round(float(re.findall('YOUR\$(.+?)E-GIFT',text)[0])))
-        elif re.findall('CARD\$(.+?)USD',text)!=[]:
-            balance=str(round(float(re.findall('CARD\$(.+?)USD',text)[0])))
+            balance.append(re.findall('YOUR\$(.+?)E-GIFT',text)[0])
+        if re.findall('CARD\$(.+?)USD',text)!=[]:
+            balance.append(re.findall('CARD\$(.+?)USD',text)[0])
+        if re.findall('YOUR\$(.+?)BONUS',text)!=[]:
+            balance.append(re.findall('YOUR\$(.+?)BONUS',text)[0])
+        if len(balance)>0:
+            balance=min(balance,key=len)
         else:
             raise ValueError("Format not supported")
+        balance=balance.replace('$','')
+        balance=str(int(float(balance)/5)*5)
+        code=[]
         if re.findall('CARDNUMBER:(.+?)PIN',text)!=[]:
-            code=re.findall('CARDNUMBER:(.+?)PIN',text)[0]
-        elif re.findall('CARDNUMBER(.+?)COPIED',text)!=[]:
-            code=re.findall('CARDNUMBER(.+?)COPIED',text)[0]
+            code.append(re.findall('CARDNUMBER:(.+?)PIN',text)[0])
+        if re.findall('CARDNUMBER(.+?)COPIED',text)!=[]:
+            code.append(re.findall('CARDNUMBER(.+?)COPIED',text)[0])
+        if len(code)>0:
+            code=min(code,key=len)
+            code=brandprocessing(brand,code)
         else:
-            raise ValueError("Format not supported")
-        code=brandprocessing(brand,code)
+            raise ValueError("Format not supported")  
         if not codeonly(brand):
             pin=[]
             if re.findall('PIN:(.+?)SEND',text)!=[]:
@@ -241,7 +274,7 @@ def urlgc(pagesave,url):
                 pin=min(pin,key=len)
             else:
                 raise ValueError("Format not supported")
-    elif 'buyatab' in url:
+    elif 'buyatab' in url: 
         if pagesave:
             pdfkit.from_url(url,savedir(),configuration=config,options=options)
         text=str(page.content)
@@ -258,7 +291,7 @@ def numonly(A):
     B=[l for l in A if l.isdigit() or l.isalpha()]
     return ''.join(B)
 #gc directory
-directory='D:\\Dropbox (MIT)\\Documents\\finance\\gift cards\\gcdata.csv'
+directory='D:\\Documents\\finance\\gift cards\\gcdata.csv'
 #def process():
 gcinput=input('Enter input format (1 for url, 2 for gc codes, 3 for scanned codes 1, 4 for scanned codes 2, 5 for excel codes) [Default '+str(df_default['gcinput'].values[0])+']: ')
 while gcinput not in {'1','2','3','4','5',''}:
@@ -317,17 +350,17 @@ if gcinput=='1':
         else:
             try:
                 url=requests.get(url).url
+                if url in urlset:
+                    print('\nDuplicate url!')
+                else:
+                    urlset.add(url)
+                    (balance,code,pin)=urlgc(pagesave,url)
+                    gccompile()
+                    print('\n'+str(len(gcdata))+' card entered!')
             except:
                 df_url=pd.DataFrame(list(urlset),columns=['url'])
                 df_url.to_csv('url.csv',index=False)
                 raise ValueError("Loading Time Out")
-            if url in urlset:
-                print('\nDuplicate url!')
-            else:
-                (balance,code,pin)=urlgc(pagesave,url)
-                gccompile()
-                urlset.add(url)
-                print('\n'+str(len(gcdata))+' card entered!')
                 
 #for physical gc parsing
 elif gcinput=='2':
@@ -385,5 +418,6 @@ for l in gcprint:
 with open(directory, 'a', newline='') as f:
     writer = csv.writer(f)
     writer.writerows(gcdata)
-os.remove('url.csv')
+if os.path.isfile('url.csv'):
+    os.remove('url.csv')
 #process()
