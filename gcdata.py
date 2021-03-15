@@ -3,12 +3,14 @@ from bs4 import BeautifulSoup
 import re
 import csv
 import datetime
+import time
 import pandas as pd
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
 import os
 
 import pdfkit
@@ -76,8 +78,20 @@ def codeonly(x):
     return not pd.isna(df[x]['codeonly'])
 
 def savedir():
-    return 'D:\\Documents\\'+datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")+'.pdf'
+#    return 'D:\\Documents\\'+datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")+'.pdf'
+    return '../../'+datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")+'.pdf'
+
 #compile gcdata into desired format for output and storage
+
+def click(button):
+    clicked=False
+    while not clicked:
+        try:
+            button.click()
+            clicked=True
+        except:
+            button.send_keys(Keys.TAB)
+            
 def gccompile():
     if gcformat=='1':
             gcdata.append([datetime.datetime.now().strftime("%Y-%m-%d"),source,brand,balance,'\''+code.replace(' ',''),'\''+pin.replace(' ','')])
@@ -99,32 +113,62 @@ def urlgc(pagesave,url):
                 pass
         text=soup.find('body').text
         if 'javascript' in text.lower():
-            text=str(page.content)
-        balance=re.findall('\"itemValue\":\"(.+?)\"',text)[0][1:]
-        if brand=='wayfair':
-            code=re.findall('\"security_code\":\"(.+?)\"',text)[0]
+            driver=webdriver.Chrome(ChromeDriverManager().install())
+            driver.minimize_window()
+            driver.get(url)
+            button=driver.find_element_by_xpath('//*[@ data-nemo="skipbutton"]')
+            click(button)
+            time.sleep(1)
+            text=BeautifulSoup(driver.page_source,'html.parser').text
+            driver.close()
+        balance=[]
+        if re.findall('\"itemValue\":\"(.+?)\"',text)!=[]:
+            balance.append(re.findall('\"itemValue\":\"(.+?)\"',text)[0][1:])
+        if re.findall('Card(.+?)Card',text)!=[]:
+            balance.append(re.findall('Card(.+?)Card',text)[0][1:])
+        if len(balance)>0:
+            balance=min(balance,key=len)
         else:
-            code=re.findall('\"card_number\":\"(.+?)\"',text)[0]
+            raise ValueError("Format not supported")
+        code=[]
+        if brand=='wayfair':
+            if re.findall('\"security_code\":\"(.+?)\"',text)!=[]:
+                code.append(re.findall('\"security_code\":\"(.+?)\"',text)[0])
+        else:
+            if re.findall('\"card_number\":\"(.+?)\"',text)!=[]:
+                code.append(re.findall('\"card_number\":\"(.+?)\"',text)[0])
+            if re.findall('Card number(.+?)PIN',text)!=[]:
+                code.append(re.findall('Card number(.+?)PIN',text)[0])
+        if len(code)>0:
+            code=min(code,key=len)
+        else:
+            raise ValueError("Format not supported")  
         code=brandprocessing(brand,code)
         if not codeonly(brand):
-            pin=re.findall('\"security_code\":\"(.+?)\"',text)[0]
+            pin=[]
+            if re.findall('\"security_code\":\"(.+?)\"',text)!=[]:
+                pin.append(re.findall('\"security_code\":\"(.+?)\"',text)[0])
+            if re.findall('PIN(.+?)Scan',text)!=[]:
+                pin.append(re.findall('PIN(.+?)Scan',text)[0])
+            if len(pin)>0:
+                pin=min(pin,key=len)
+            else:
+                raise ValueError("Format not supported")
     elif 'activationspot' in url or 'blackhawknetwork' in url:
         if pagesave:
             pdfkit.from_url(url,savedir(),configuration=config,options=options)
         text=soup.find('body').text
         if 'Javascript' in text:
-            option = webdriver.ChromeOptions()
-            option.add_argument("— incognito")
-            browser = webdriver.Chrome(options=option)
-            browser.get(url)
-            browser.minimize_window()
+            driver=webdriver.Chrome(ChromeDriverManager().install())
+            driver.minimize_window()
+            driver.get(url)
             try:
                 element_present = EC.presence_of_element_located((By.ID, 'main'))
                 WebDriverWait(browser, 30).until(element_present)
             except TimeoutException:
                 print("Timed out waiting for page to load")
-            text=browser.find_element_by_id(id_='main').text
-            browser.quit()
+            text=driver.find_element_by_id(id_='main').text
+            driver.quit()
         text=text.replace('\xa0','')
         text=text.replace('\n','')
         text=text.replace('\t','')
@@ -152,6 +196,8 @@ def urlgc(pagesave,url):
             balance.append(re.findall('AMOUNT\:\$(.+?)E-GIFT',text)[0])
         if re.findall('CARD\$(.+?)FROM',text)!=[]:
             balance.append(re.findall('CARD\$(.+?)FROM',text)[0])
+        if re.findall('YOUR\$(.+?)EGIFT',text)!=[]:
+            balance.append(re.findall('YOUR\$(.+?)EGIFT',text)[0])
         if len(balance)>0:
             balance=min(balance,key=len)
         else:
@@ -179,6 +225,8 @@ def urlgc(pagesave,url):
             code.append(re.findall('CODE:(.+?)CARD',text)[0])
         if re.findall('CODE:(.+?)TO',text)!=[]:
             code.append(re.findall('CODE:(.+?)TO',text)[0])
+        if re.findall('USDEGIFTCARD(.+?)PIN',text)!=[]:
+            code.append(re.findall('USDEGIFTCARD(.+?)PIN',text)[0])
         if len(code)>0:
             code=min(code,key=len)
         else:
@@ -197,6 +245,8 @@ def urlgc(pagesave,url):
                 pin.append(re.findall('PIN:(.+?)USING',text)[0])
             if re.findall('PIN:(.+?)BARCODE',text)!=[]:
                 pin.append(re.findall('PIN:(.+?)BARCODE',text)[0])
+            if re.findall('PIN:(.+?)VALID',text)!=[]:
+                pin.append(re.findall('PIN:(.+?)VALID',text)[0])
             pin=pinprocessing(brand,code,pin)
             if len(pin)>0:
                 pin=min(pin,key=len)
@@ -291,7 +341,8 @@ def numonly(A):
     B=[l for l in A if l.isdigit() or l.isalpha()]
     return ''.join(B)
 #gc directory
-directory='D:\\Documents\\finance\\gift cards\\gcdata.csv'
+#directory='D:\\Documents\\finance\\gift cards\\gcdata.csv'
+directory='../../finance/gift cards/gcdata.csv'
 #def process():
 gcinput=input('Enter input format (1 for url, 2 for gc codes, 3 for scanned codes 1, 4 for scanned codes 2, 5 for excel codes) [Default '+str(df_default['gcinput'].values[0])+']: ')
 while gcinput not in {'1','2','3','4','5',''}:
@@ -378,6 +429,7 @@ elif gcinput=='2':
             code=brandprocessing(brand,code)
             if not codeonly(brand):
                 pin=input('Enter gc pin: ')
+                pin=numonly(pin)
             gccompile()
         print('\n'+str(len(gcdata))+' card entered!')
 #for scanned gc parsing
