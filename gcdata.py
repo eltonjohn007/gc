@@ -126,6 +126,8 @@ def urlgc(pagesave,url):
             balance.append(re.findall('\"itemValue\":\"(.+?)\"',text)[0][1:])
         if re.findall('Card(.+?)Card',text)!=[]:
             balance.append(re.findall('Card(.+?)Card',text)[0][1:])
+        if re.findall('Card(.+?)Scan',text)!=[]:
+            balance.append(re.findall('Card(.+?)Scan',text)[0][1:])
         if len(balance)>0:
             balance=min(balance,key=len)
         else:
@@ -150,6 +152,8 @@ def urlgc(pagesave,url):
                 pin.append(re.findall('\"security_code\":\"(.+?)\"',text)[0])
             if re.findall('PIN(.+?)Scan',text)!=[]:
                 pin.append(re.findall('PIN(.+?)Scan',text)[0])
+            if re.findall('PIN(.+?)How',text)!=[]:
+                pin.append(re.findall('PIN(.+?)How',text)[0])
             if len(pin)>0:
                 pin=min(pin,key=len)
             else:
